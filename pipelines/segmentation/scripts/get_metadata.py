@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-Extract OME-TIFF metadata and write it to a JSON file.
+Extract physical metadata from an OME-TIFF file and write it to JSON.
 
 Usage:
-    python get_ome_metadata.py <input_image.ome.tiff> <output_metadata.json>
+    python get_metadata.py <input_image.ome.tiff> <output_metadata.json>
 """
 
 import sys
@@ -12,19 +12,30 @@ import json
 import xml.etree.ElementTree as ET
 from tifffile import TiffFile
 
-# OME namespace
+# OME namespace.
 _OME_NS = {"ome": "http://www.openmicroscopy.org/Schemas/OME/2016-06"}
 
 
 def load_ome_physical_info(fpath):
-    """Return OME physical metadata as dict."""
+    """Return physical OME-TIFF metadata as a dictionary.
+
+    Parameters
+    ----------
+    fpath : str or Path
+        Path to the OME-TIFF image.
+
+    Returns
+    -------
+    dict
+        Parsed physical metadata.
+    """
     with TiffFile(fpath) as tif:
         ome_xml = tif.ome_metadata
         dtype = tif.pages[0].dtype if tif.pages else None
 
     root = ET.fromstring(ome_xml)
 
-    # Pixels block
+    # Pixels block.
     px = root.find(".//ome:Image/ome:Pixels", _OME_NS)
     sizeX = int(px.get("SizeX"))
     sizeY = int(px.get("SizeY"))
@@ -39,7 +50,7 @@ def load_ome_physical_info(fpath):
     sx_unit = px.get("PhysicalSizeXUnit") or "µm"
     sy_unit = px.get("PhysicalSizeYUnit") or "µm"
 
-    # Origin info
+    # Origin information.
     plate = root.find(".//ome:Plate", _OME_NS)
     well_sample = root.find(".//ome:Well/ome:WellSample", _OME_NS)
     well_origin_x = float(plate.get("WellOriginX")) if plate is not None and plate.get("WellOriginX") else 0.0
@@ -51,13 +62,13 @@ def load_ome_physical_info(fpath):
     origin_y = well_origin_y + pos_y
     origin_unit = "µm"
 
-    # Channel names
+    # Channel names.
     ch_names = [
         ch.get("Name") or f"Channel-{i}"
         for i, ch in enumerate(root.findall(".//ome:Image/ome:Pixels/ome:Channel", _OME_NS))
     ]
 
-    # Acquisition date
+    # Acquisition date.
     acq = root.find(".//ome:Image/ome:AcquisitionDate", _OME_NS)
     acq_time = acq.text if acq is not None else None
 
@@ -86,7 +97,9 @@ def load_ome_physical_info(fpath):
 
 if __name__ == "__main__":
     if len(sys.argv) != 3:
-        sys.exit("Usage: python get_ome_metadata.py <input_image.ome.tiff> <output_metadata.json>")
+        sys.exit(
+            "Usage: python get_metadata.py <input_image.ome.tiff> <output_metadata.json>"
+        )
 
     image_path = sys.argv[1]
     out_json = sys.argv[2]
@@ -96,7 +109,7 @@ if __name__ == "__main__":
 
     info = load_ome_physical_info(image_path)
 
-    # Write metadata
+    # Write metadata.
     os.makedirs(os.path.dirname(out_json), exist_ok=True)
     with open(out_json, "w") as f:
         json.dump(info, f, indent=2)
