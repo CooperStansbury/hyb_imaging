@@ -271,7 +271,7 @@ if __name__ == "__main__":
     p.add_argument("--out-seg", required=True)
     p.add_argument("--out-props", required=True)
     p.add_argument("--model-info", default="2D_versatile_fluo")
-    p.add_argument("--segment_channel", type=str, default="TaGFP")
+    p.add_argument("--segment_channel", type=str, default="Cy5")
     p.add_argument("--prob-thresh", type=float, default=0.4)
     p.add_argument("--nms-thresh", type=float, default=0.2)
     p.add_argument("--summarize-channels", default="all")
