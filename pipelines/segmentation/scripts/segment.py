@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Stub segmentation script.
+Placeholder segmentation script for the segmentation pipeline.
 
 CLI (matches Snakefile rule):
   --image PATH               input image
@@ -39,25 +39,36 @@ from skimage.measure import regionprops
 from skimage.measure import regionprops_table
 from skimage.segmentation import mark_boundaries
 
-# stardist
+# Stardist imports.
 from csbdeep.utils import normalize
 from stardist.models import StarDist2D
 
 
 def resolve_channel_index(segment_channel, meta):
-    """
-    Return integer channel index.
+    """Resolve a channel specification to an integer index.
+
+    Parameters
+    ----------
+    segment_channel : str or int
+        Channel name or index.
+    meta : dict
+        Metadata dictionary containing channel information.
+
+    Returns
+    -------
+    int
+        Resolved channel index.
     """
     chs = (meta.get("channels") or [])
     C = meta.get("size", {}).get("C", len(chs) or 1)
 
-    # default / auto
+    # Default channel selection.
     if not segment_channel or str(segment_channel).lower() in {"auto", "none"}:
         return 0
 
     s = str(segment_channel).strip()
 
-    # numeric index (supports negatives), clamped to [0, C-1]
+    # Numeric index (supports negatives), clamped to [0, C-1].
     try:
         idx = int(s)
         if idx < 0:
@@ -66,14 +77,15 @@ def resolve_channel_index(segment_channel, meta):
     except ValueError:
         pass
 
-    # name match (case-insensitive) against reversed list
+    # Name match (case-insensitive) against list of channel names.
     try:
         return [c.lower() for c in chs].index(s.lower())
     except ValueError:
         return 0
 
-# minimal image IO
+# Minimal image I/O.
 def imread_any(path):
+    """Read an image using tifffile, falling back to imageio."""
     try:
         import tifffile as tiff
         return tiff.imread(path)
@@ -97,8 +109,8 @@ def print_params(args, title="[PARAMS]"):
 
 
 def _probe_supported_props(labels, intensity_image=None):
-    """Return list of regionprops_table properties supported by current skimage."""
-    # Comprehensive candidate list of scalar/table-friendly props
+    """Return list of regionprops_table properties supported by current scikit-image."""
+    # Comprehensive candidate list of scalar/table-friendly props.
     candidates = [
         "label", "area", "bbox", "bbox_area", "centroid", "eccentricity",
         "equivalent_diameter", "euler_number", "extent", "feret_diameter_max",
@@ -112,7 +124,7 @@ def _probe_supported_props(labels, intensity_image=None):
             regionprops_table(labels, intensity_image=intensity_image, properties=[prop])
             supported.append(prop)
         except Exception:
-            # not supported in this skimage build
+            # Not supported in this scikit-image build.
             pass
     return supported
 
@@ -120,10 +132,10 @@ def segment_single_channel_allprops(
     img,
     info,
     stardist_model,
-    channel,                     # index or name
+    channel,                     # Index or name.
     prob_thresh=0.4,
     nms_thresh=0.2,
-    summarize_channels="all"     # "all" or list of indices/names
+    summarize_channels="all"     # "All" or list of indices/names.
 ):
     """
     Segment a single channel from (C, T, Y, X, 3), return labels and a table with:
@@ -131,7 +143,7 @@ def segment_single_channel_allprops(
       - Intensity stats for every requested channel: mean/max/min/sum
       - Pixel + physical centroids
     """
-    # ---- resolve channels ----
+    # ---- Resolve channels ----
     ch_names = (info.get("channels", []))
     def _to_idx(ch):
         return ch_names.index(ch) if isinstance(ch, str) else int(ch)
@@ -146,7 +158,7 @@ def segment_single_channel_allprops(
     if seg_idx not in sum_idx:
         sum_idx = [seg_idx] + sum_idx
 
-    # ---- metadata (µm) ----
+    # ---- Metadata (µm) ----
     sx = float(info["physical_pixel_size"]["X"])
     sy = float(info["physical_pixel_size"]["Y"])
     ox = float(info["origin"]["X"])
@@ -156,25 +168,25 @@ def segment_single_channel_allprops(
     if unit_px != unit_org:
         raise ValueError("Pixel-size and origin units differ; convert first.")
 
-    # ---- shapes ----
+    # ---- Shapes ----
     C, T, Y, X, _ = img.shape
     if not (0 <= seg_idx < C):
         raise IndexError(f"Channel index {seg_idx} out of range [0, {C-1}]")
 
-    # ---- outputs ----
+    # ---- Outputs ----
     segments = np.zeros((T, Y, X), dtype=np.int32)
     rows = []
 
-    # ---- model ----
+    # ---- Model ----
     model = StarDist2D.from_pretrained(stardist_model)
 
-    # Probe supported properties once (using a dummy tiny label if needed later)
-    # We'll probe on the fly after first successful frame to match your skimage build.
+    # Probe supported properties once (using a dummy tiny label if needed later).
+    # We'll probe on the fly after the first successful frame to match your scikit-image build.
     supported_props = None
 
     with tqdm(total=T, desc=f"Segmenting [{seg_name}]", unit="frame") as pbar:
         for t in range(T):
-            # segment on selected channel
+            # Segment on selected channel.
             raw_seg = rgb2gray(img[seg_idx, t])
             try:
                 labels, _ = model.predict_instances(
@@ -188,11 +200,11 @@ def segment_single_channel_allprops(
 
             segments[t] = labels.astype(np.int32, copy=False)
 
-            # discover supported props (once)
+            # Discover supported properties (once).
             if supported_props is None:
                 supported_props = _probe_supported_props(labels, intensity_image=raw_seg)
 
-            # geometry + intensity from segmentation channel
+            # Geometry and intensity from segmentation channel.
             main_props = regionprops_table(
                 labels,
                 intensity_image=raw_seg,
@@ -205,14 +217,14 @@ def segment_single_channel_allprops(
                 pbar.update(1)
                 continue
 
-            # physical centroids
+            # Physical centroids.
             df["centroid_x_px"] = df["centroid-1"]
             df["centroid_y_px"] = df["centroid-0"]
             df["centroid_x_um"] = ox + df["centroid_x_px"] * sx
             df["centroid_y_um"] = oy + df["centroid_y_px"] * sy
             df["centroid_unit"] = unit_org
 
-            # add segmentation-channel explicit names
+            # Add segmentation-channel explicit names.
             df.rename(columns={
                 "mean_intensity": f"{seg_name}_mean",
                 "max_intensity":  f"{seg_name}_max",
@@ -220,7 +232,7 @@ def segment_single_channel_allprops(
             }, inplace=True)
             df[f"{seg_name}_sum"] = df[f"{seg_name}_mean"] * df["area"]
 
-            # add intensity summaries for other channels
+            # Add intensity summaries for other channels.
             for c in sum_idx:
                 if c == seg_idx:
                     continue
@@ -239,7 +251,7 @@ def segment_single_channel_allprops(
                 add[f"{ch_label}_sum"] = add[f"{ch_label}_mean"] * df["area"]
                 df = df.merge(add, on="label", how="left")
 
-            # annotate indices
+            # Annotate indices.
             df["time"] = t
             df["seg_channel_idx"] = seg_idx
             df["seg_channel_name"] = seg_name
@@ -267,12 +279,12 @@ if __name__ == "__main__":
 
     print_params(args)
 
-    # load image
+    # Load image.
     img = imread_any(args.image)
     print(f"[IMAGE] path={args.image}")
     print(f"[IMAGE] shape={getattr(img, 'shape', None)} dtype={getattr(img, 'dtype', None)}\n")
 
-    # load metadata JSON
+    # Load metadata JSON.
     meta_path = Path(args.meta)
     try:
         with meta_path.open("r") as fh:
@@ -284,13 +296,13 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"[META][ERROR] failed to read '{meta_path}': {e}\n")
 
-    # get the numeric channel from the metadata
+    # Determine numeric channel from metadata.
     idx = resolve_channel_index(args.segment_channel, info)
     chs = (info.get("channels") or [])
     name = chs[idx] if 0 <= idx < len(chs) else "unknown"
     print(f"[SEGMENTATION CHANNEL] index={idx} name={name}")
 
-    """ SEGMENT """
+    # Segment.
     segments, props = segment_single_channel_allprops(
         img=img,
         info=info,
@@ -299,9 +311,9 @@ if __name__ == "__main__":
         prob_thresh=args.prob_thresh,
         nms_thresh=args.nms_thresh,
         summarize_channels=args.summarize_channels,
-    )    
-    
-   # --- save segmentation with NumPy (.npy) ---
+    )
+
+    # --- Save segmentation with NumPy (.npy) ---
     seg_path = Path(args.out_seg)
     seg_path.parent.mkdir(parents=True, exist_ok=True)
     
@@ -311,14 +323,14 @@ if __name__ == "__main__":
     elif not np.issubdtype(seg.dtype, np.integer):
         seg = seg.astype(np.uint16)
     
-    # ensure .npy (np.save will append if missing; better to set explicitly)
+    # Ensure .npy extension (np.save will append if missing; better to set explicitly).
     if seg_path.suffix != ".npy":
         seg_path = seg_path.with_suffix(".npy")
     
     np.save(seg_path, seg)
     print(f"[WRITE] seg (npy): {seg_path}  shape={seg.shape} dtype={seg.dtype}")
     
-    # --- save region properties CSV (unchanged) ---
+    # --- Save region properties CSV (unchanged) ---
     props_path = Path(args.out_props)
     props_path.parent.mkdir(parents=True, exist_ok=True)
     df_props = props if isinstance(props, pd.DataFrame) else pd.DataFrame(props)
