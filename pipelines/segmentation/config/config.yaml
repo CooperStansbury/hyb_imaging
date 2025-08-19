@@ -1,0 +1,10 @@
+use-conda: true
+input_paths: "config/inputs.txt"
+output_path: "/scratch/indikar_root/indikar1/shared_data/segmentation_test/"
+conda_env: "/nfs/turbo/umms-indikar/Cooper/conda_envs/imaging"
+stardist_params:
+  info: "2D_versatile_fluo"
+  segment_channel: "TaGFP"
+  prob_thresh: 0.45
+  nms_thresh: 0.2
+  summarize_channels: "all"

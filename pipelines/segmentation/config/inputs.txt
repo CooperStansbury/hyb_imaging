@@ -1,0 +1,2 @@
+image_name,file_path
+test,/scratch/indikar_root/indikar1/shared_data/HYB/Imaging/ometiff_test/20241221-01-test-stitched-JC_s1.ome.tiff
