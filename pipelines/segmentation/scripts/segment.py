@@ -48,7 +48,7 @@ def resolve_channel_index(segment_channel, meta):
     """
     Return integer channel index.
     """
-    chs = (meta.get("channels") or [])[::-1]
+    chs = (meta.get("channels") or [])
     C = meta.get("size", {}).get("C", len(chs) or 1)
 
     # default / auto
@@ -132,7 +132,7 @@ def segment_single_channel_allprops(
       - Pixel + physical centroids
     """
     # ---- resolve channels ----
-    ch_names = (info.get("channels", []))[::-1]
+    ch_names = (info.get("channels", []))
     def _to_idx(ch):
         return ch_names.index(ch) if isinstance(ch, str) else int(ch)
 
@@ -286,7 +286,7 @@ if __name__ == "__main__":
 
     # get the numeric channel from the metadata
     idx = resolve_channel_index(args.segment_channel, info)
-    chs = (info.get("channels") or [])[::-1]
+    chs = (info.get("channels") or [])
     name = chs[idx] if 0 <= idx < len(chs) else "unknown"
     print(f"[SEGMENTATION CHANNEL] index={idx} name={name}")
 
