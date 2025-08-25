@@ -1,6 +1,5 @@
-use-conda: true
 input_paths: "config/inputs.txt"
-output_path: "/scratch/indikar_root/indikar1/shared_data/segmentation_test/"
+output_path: "/scratch/indikar_root/indikar1/shared_data/hybrid_segmentation/"
 conda_env: "/nfs/turbo/umms-indikar/Cooper/conda_envs/imaging"
 stardist_params:
   info: "2D_versatile_fluo"
